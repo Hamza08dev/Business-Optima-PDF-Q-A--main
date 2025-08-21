@@ -335,7 +335,10 @@
         <div class="header">
             <h1>Business Optima</h1>
             <p>AI-Powered PDF Analysis & Enhanced Summarization</p>
-            <button class="btn btn-secondary" id="setApiBtn" style="margin-top:10px;">Set API URL</button>
+            <div style="margin-top:10px; display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap:wrap;">
+                <button class="btn btn-secondary" id="setApiBtn">Set API URL</button>
+                <span id="apiDisplay" style="background: rgba(255,255,255,0.15); padding:6px 10px; border-radius:6px; font-size:0.9rem;">API: loading...</span>
+            </div>
         </div>
 
         <div class="main-content">
@@ -410,8 +413,56 @@
     </div>
 
     <script>
-        // Configurable API base for hosting UI on GitHub Pages and backend on ngrok/Cloudflare
-        const API_BASE = (localStorage.getItem('API_BASE') || window.location.origin).replace(/\/$/, '');
+        // API base resolution order:
+        // 1) URL param ?api=https://...
+        // 2) localStorage.API_BASE
+        // 3) config.json (same origin)
+        // 4) window.location.origin
+        let API_BASE = window.location.origin.replace(/\/$/, '');
+        const apiDisplayEl = document.getElementById('apiDisplay');
+
+        function getQueryParam(name) {
+            const url = new URL(window.location.href);
+            return url.searchParams.get(name);
+        }
+
+        async function loadApiConfig() {
+            try {
+                const qp = getQueryParam('api');
+                if (qp) {
+                    const u = new URL(qp);
+                    localStorage.setItem('API_BASE', u.origin);
+                }
+
+                const fromStorage = localStorage.getItem('API_BASE');
+                if (fromStorage) {
+                    API_BASE = fromStorage.replace(/\/$/, '');
+                    updateApiDisplay();
+                    return;
+                }
+
+                // Try config.json next
+                const resp = await fetch('config.json', { cache: 'no-store' });
+                if (resp.ok) {
+                    const cfg = await resp.json();
+                    if (cfg && cfg.API_BASE) {
+                        const u = new URL(cfg.API_BASE);
+                        API_BASE = u.origin.replace(/\/$/, '');
+                        updateApiDisplay();
+                        return;
+                    }
+                }
+            } catch (e) {
+                // ignore, fallback to origin
+            }
+            updateApiDisplay();
+        }
+
+        function updateApiDisplay() {
+            if (apiDisplayEl) {
+                apiDisplayEl.textContent = `API: ${API_BASE}`;
+            }
+        }
 
         let isDocumentLoaded = false;
         let isProcessing = false;
@@ -458,6 +509,9 @@
                 }
             });
         }
+
+        // Load API config at startup
+        loadApiConfig();
 
         // File upload handling
         uploadArea.addEventListener('click', () => fileInput.click());
